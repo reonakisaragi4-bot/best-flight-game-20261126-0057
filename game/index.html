@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skyline Courier — a 3D flight game</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a1018; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .hidden { display: none !important; }
+
+  .panel { background: rgba(8, 14, 22, 0.72); border: 1px solid rgba(255, 176, 46, 0.35); border-radius: 10px; color: #eef1f5; backdrop-filter: blur(2px); }
+  .label { font-size: 10px; letter-spacing: 2px; color: #9fb0c0; text-transform: uppercase; }
+  .value { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; line-height: 1.05; }
+  .unit { font-size: 11px; color: #9fb0c0; }
+
+  #hud-top { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; pointer-events: none; }
+  #hud-flight { display: flex; gap: 18px; padding: 10px 16px; }
+  #hud-flight .cell { text-align: center; min-width: 64px; }
+  #hud-mission { padding: 10px 18px; text-align: center; max-width: 460px; }
+  #hud-banner { font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #ffb02e; }
+  #hud-next-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 4px; }
+  #hud-next { font-size: 15px; font-weight: 600; }
+  #hud-arrow { font-size: 20px; color: #ffb02e; display: inline-block; transition: transform 0.15s linear; }
+  #hud-right { padding: 10px 16px; min-width: 210px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .bar-row .label { width: 52px; }
+  .bar { flex: 1; height: 10px; background: rgba(255,255,255,0.14); border-radius: 5px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 5px; transition: width 0.2s; }
+  #hud-fuel-bar { background: #37b6ff; }
+  #hud-fuel-bar.low { background: #ff5a3c; }
+  #hud-dmg-bar { background: #ff5a3c; }
+  .bar-val { font-size: 12px; width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+  #hud-score-row { display: flex; justify-content: space-between; margin-top: 6px; font-size: 13px; }
+  #hud-score-row b { color: #ffb02e; font-size: 16px; }
+
+  #hud-bottom { position: fixed; left: 12px; bottom: 12px; right: 12px; display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; pointer-events: none; }
+  #hud-instruments { display: flex; gap: 14px; padding: 12px 16px; align-items: center; }
+  #hud-instruments canvas { border-radius: 6px; border: 1px solid rgba(255,176,46,0.4); }
+  #hud-compass { width: 340px; height: 40px; }
+  .inst-col { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+  #hud-throttle-wrap { display: flex; gap: 10px; padding: 12px 16px; align-items: stretch; }
+  #hud-throttle-track { width: 12px; height: 108px; background: rgba(255,255,255,0.14); border-radius: 6px; position: relative; overflow: hidden; }
+  #hud-throttle-fill { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(#ffb02e, #ff7a1a); }
+  #hud-help { padding: 10px 14px; font-size: 12px; line-height: 1.55; color: #c8d2dc; max-width: 300px; }
+  #hud-help b { color: #ffb02e; }
+
+  #hud-toast { position: fixed; top: 34%; left: 50%; transform: translate(-50%, -50%); padding: 12px 26px; font-size: 22px; font-weight: 700; letter-spacing: 1px; color: #ffb02e; text-shadow: 0 2px 8px rgba(0,0,0,0.7); pointer-events: none; }
+
+  #cockpit-frame { position: fixed; inset: 0; pointer-events: none; }
+  #cockpit-frame .dash { position: absolute; left: 0; right: 0; bottom: 0; height: 120px; background: linear-gradient(rgba(10,12,16,0), #14181d 55%, #0b0e12); }
+  #cockpit-frame .strut { position: absolute; top: 0; bottom: 120px; width: 34px; background: linear-gradient(90deg, #10141a, #232a31); }
+  #cockpit-frame .strut.left { left: 0; }
+  #cockpit-frame .strut.right { right: 0; }
+  body.cockpit-mode #hud-bottom { bottom: 132px; left: 44px; right: 44px; }
+  body.cockpit-mode #hud-top { left: 44px; right: 44px; }
+
+  .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(6, 10, 16, 0.55); z-index: 10; }
+  #screen-title { justify-content: flex-start; }
+  #screen-title .card { margin-left: 44px; max-width: 500px; text-align: left; }
+  #screen-end { justify-content: flex-start; }
+  #screen-end .card { margin-left: 44px; max-width: 500px; text-align: left; }
+  .screen .card { max-width: 620px; padding: 34px 44px; text-align: center; }
+  .screen h1 { margin: 0 0 6px; font-size: 46px; letter-spacing: 2px; color: #ffb02e; }
+  .screen h2 { margin: 0 0 10px; font-size: 34px; letter-spacing: 2px; color: #ffb02e; }
+  .screen p { color: #d5dde5; font-size: 15px; line-height: 1.6; }
+  .screen .controls { text-align: left; display: inline-block; margin: 12px auto 4px; font-size: 14px; line-height: 1.9; color: #c8d2dc; }
+  .screen .controls b { color: #ffb02e; display: inline-block; min-width: 170px; }
+  .screen .cta { margin-top: 18px; font-size: 18px; font-weight: 700; color: #fff; }
+  .screen .cta span { color: #ffb02e; }
+  #end-stats { font-size: 17px; color: #fff; margin-top: 8px; }
+  #title-best { color: #9fb0c0; font-size: 13px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Skyline Courier: fly the courier plane through the glowing rings over the valley"></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud-top">
+  <div id="hud-flight" class="panel">
+    <div class="cell"><div class="label">Altitude</div><div class="value"><span id="hud-alt">0000</span> <span class="unit">ft</span></div></div>
+    <div class="cell"><div class="label">Speed</div><div class="value"><span id="hud-spd">000</span> <span class="unit">kt</span></div></div>
+    <div class="cell"><div class="label">Heading</div><div class="value"><span id="hud-hdg">000</span><span class="unit">°</span></div></div>
+  </div>
+  <div id="hud-mission" class="panel">
+    <div id="hud-banner">COURIER RUN</div>
+    <div id="hud-next-row"><span id="hud-arrow">➤</span><span id="hud-next">RING 1 — 0 m</span></div>
+  </div>
+  <div id="hud-right" class="panel">
+    <div class="bar-row"><span class="label">Fuel</span><div class="bar"><div id="hud-fuel-bar" style="width:100%"></div></div><span class="bar-val" id="hud-fuel">100%</span></div>
+    <div class="bar-row"><span class="label">Damage</span><div class="bar"><div id="hud-dmg-bar" style="width:0%"></div></div><span class="bar-val" id="hud-dmg">0%</span></div>
+    <div id="hud-score-row"><span>Score <b id="hud-score">0</b></span><span>Rings <b id="hud-rings">0 / 6</b></span><span>Time <b id="hud-time">00:00</b></span></div>
+  </div>
+</div>
+
+<div id="hud-toast" class="panel hidden"></div>
+
+<div id="hud-bottom">
+  <div id="hud-instruments" class="panel">
+    <div class="inst-col"><span class="label">Attitude</span><canvas id="hud-horizon" width="200" height="110"></canvas></div>
+    <div class="inst-col"><span class="label">Compass</span><canvas id="hud-compass" width="340" height="40"></canvas></div>
+  </div>
+  <div id="hud-help" class="panel"><b>W / S</b> throttle &nbsp; <b>← → / A D</b> bank &nbsp; <b>↑ ↓</b> climb / dive<br><b>Mouse</b> steer &nbsp; <b>C</b> camera &nbsp; <b>P</b> pause &nbsp; <b>R</b> restart<br>Fly through the amber rings in order. Land on the runway to refuel and repair.</div>
+  <div id="hud-throttle-wrap" class="panel">
+    <div class="inst-col"><span class="label">Throttle</span><div id="hud-throttle-track"><div id="hud-throttle-fill" style="height:0%"></div></div></div>
+  </div>
+</div>
+
+<div id="cockpit-frame" class="hidden"><div class="strut left"></div><div class="strut right"></div><div class="dash"></div></div>
+
+<div id="screen-title" class="screen">
+  <div class="card panel">
+    <h1>SKYLINE COURIER</h1>
+    <p>A 3D flight game over a mountain valley. You fly the mail plane: thread the six glowing rings in order, watch your fuel, and bring her home to the runway in one piece.</p>
+    <div class="controls">
+      <div><b>W / S or Shift / Ctrl</b> throttle up / down</div>
+      <div><b>← → or A / D</b> bank left / right</div>
+      <div><b>↑ ↓ or I / K</b> climb / dive</div>
+      <div><b>Mouse</b> steer like a stick</div>
+      <div><b>C</b> chase / cockpit camera &nbsp; <b>P</b> pause &nbsp; <b>R</b> restart</div>
+    </div>
+    <p class="cta">Click or press <span>Enter</span> to fly</p>
+    <p id="title-best"></p>
+  </div>
+</div>
+
+<div id="screen-pause" class="screen hidden">
+  <div class="card panel">
+    <h2>PAUSED</h2>
+    <p>Press <b>P</b> or click to keep flying, or <b>R</b> to restart the run.</p>
+  </div>
+</div>
+
+<div id="screen-end" class="screen hidden">
+  <div class="card panel">
+    <h2 id="end-title">MISSION COMPLETE</h2>
+    <p id="end-stats"></p>
+    <p class="cta">Press <span>Enter</span> or click to fly again</p>
+  </div>
+</div>
+
+<div id="selftest" style="display:none"></div>
+
+<script src="./vendor/three.min.js"></script>
+<script src="./src/config.js"></script>
+<script src="./src/random.js"></script>
+<script src="./src/terrain.js"></script>
+<script src="./src/plane.js"></script>
+<script src="./src/input.js"></script>
+<script src="./src/hud.js"></script>
+<script src="./src/world.js"></script>
+<script src="./src/shots.js"></script>
+<script src="./src/main.js"></script>
+</body>
+</html>
